@@ -1,0 +1,106 @@
+<Model xmlns="https://a-herzog.github.io" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="https://a-herzog.github.io https://a-herzog.github.io/Warteschlangensimulator/Simulator.xsd">
+  
+  <ModelVersion>6.0.0</ModelVersion>
+  <ModelAuthor>Alexander Herzog</ModelAuthor>
+  <ModelClients Active="1">10000000000</ModelClients>
+  <ModelWarmUpPhase>0.01</ModelWarmUpPhase>
+  <ModelTerminationTime Active="0">10:00:00:00</ModelTerminationTime>
+  <ModelElements>
+    <ModelElementSource id="1">
+      <ModelElementName>Kunden</ModelElementName>
+      <ModelElementSize h="50" w="100" x="100" y="100" />
+      <ModelElementConnection Element="3" Type="Out" />
+      <ModelElementDistribution TimeBase="Seconds">Exponential distribution (250.0)</ModelElementDistribution>
+      <ModelElementBatchData Size="1;2;2;1" />
+    </ModelElementSource>
+    <ModelElementHoldScript id="2">
+      <ModelElementSize h="50" w="100" x="300" y="100" />
+      <ModelElementConnection Element="3" Type="In" />
+      <ModelElementConnection Element="6" Type="Out" />
+      <ModelElementHoldScriptCondition Language="Java" TimeType="Waiting time">void function(SimulationInterface sim) {
+	
+  double batchWaitingTime=(Double)sim.getSystem().calc("BatchWaitingTime");	
+  int batchSize=16;
+  
+  int count=sim.getClients().count();  
+  double now=sim.getSystem().getTime();
+  double lastArrivalTime=(Double)sim.getSystem().calc("LastArrival");
+  //sim.getSystem().log("An der Station: "+count);
+  
+  /* Wurde die Ausf&#252;hrung durch eine Ankunft getriggert */
+  boolean wasArrival=false;
+  if (count&gt;0) {
+  	wasArrival=(sim.getClients().clientData(count-1,1)==0);
+  	sim.getClients().clientData(count-1,1,1);
+  }
+
+  /* Kunden nur freigeben, wenn Bedienstation im Leerlauf */
+  if (sim.getSystem().getWIP(4)==0) {
+
+    /* Ein oder mehrere Batche voll? */
+    if (count&gt;=batchSize) {
+  	  int fullBatches=count/batchSize;
+  	  //sim.getSystem().log("Freigabe von: "+(fullBatches*batchSize));
+  	  for (int i=0;i&lt;fullBatches*batchSize;i++) {
+  	      sim.getClients().release(i); 		
+  	  }  	
+    } else {
+  	  if (!wasArrival &amp;&amp; lastArrivalTime+batchWaitingTime&lt;=now) {
+  		/* Letzte Ankunft mehr als 60 Sekunden her. -&gt; Alle Kunden freigeben. */
+  		//sim.getSystem().log("Letzte Ankunft ist mehr als 60 Sekunden her. Es werden alle "+count+" Kunden freigegeben.");
+  		for (int i=0;i&lt;count;i++) {
+  		  sim.getClients().release(i);
+  		}
+  	  }
+    }
+  }
+
+  if (wasArrival) {
+    //sim.getSystem().log("Aktuelle Zeit ("+now+") wird als Zeitpunkt der letzten Ankunft erfasst.");
+    sim.getSystem().set("LastArrival",now);
+    sim.getSystem().triggerScriptExecution(2,now+batchWaitingTime);
+  }
+}
+</ModelElementHoldScriptCondition>
+    </ModelElementHoldScript>
+    <ModelElementEdge id="3">
+      <ModelElementName>Arrivals (Kunden)</ModelElementName>
+      <ModelElementConnection Element1="1" Element2="2" Type="Edge" />
+    </ModelElementEdge>
+    <ModelElementProcessStation id="4">
+      <ModelElementSize h="50" w="100" x="500" y="100" />
+      <ModelElementConnection Element="6" Type="In" />
+      <ModelElementConnection Element="7" Type="Out" />
+      <ModelElementBatchData Maximum="16" Minimum="1" />
+      <ModelElementDistribution Status="ProcessTime" TimeBase="Seconds" Type="ProcessingTime">Lognormal distribution (1440.0;720.0)</ModelElementDistribution>
+      <ModelElementPriority ClientType="Kunden">w</ModelElementPriority>
+      <ModelElementOperators Alternative="1" Count="1" Group="Neue Bedienergruppe" />
+      <ModelElementOperatorsPriority>1</ModelElementOperatorsPriority>
+    </ModelElementProcessStation>
+    <ModelElementDispose id="5">
+      <ModelElementSize h="50" w="100" x="700" y="100" />
+      <ModelElementConnection Element="7" Type="In" />
+    </ModelElementDispose>
+    <ModelElementEdge id="6">
+      <ModelElementConnection Element1="2" Element2="4" Type="Edge" />
+    </ModelElementEdge>
+    <ModelElementEdge id="7">
+      <ModelElementConnection Element1="4" Element2="5" Type="Edge" />
+    </ModelElementEdge>
+  </ModelElements>
+  <Resources SecondaryPriority="Random">
+    <Resource Name="Neue Bedienergruppe" Type="Number" Value="1" />
+  </Resources>
+  <ClientTypeData />
+  <InitialVariable Name="LastArrival">0</InitialVariable>
+  <InitialVariable Name="BatchWaitingTime">210</InitialVariable>
+  <ModelEdgesNormal Color="0,0,0" Type="0" Width="1" />
+  <ModelEdgesSelected Type="0" Width="1" />
+  <ModelElementConnectionDrawStyle>Angled around</ModelElementConnectionDrawStyle>
+  <ModelElementConnectionArrowStyle>Medium</ModelElementConnectionArrowStyle>
+  <CriticalStationsSignature>
+    <SignatureStation Hash="J1BpVs+mgrKhTxzqhSalRH0woF8yJ8x452QRm90cXII=" Signature="bW48EY0CqenQteXj6IKJjWWsnS3MwooWJa1OGGkpGkE7bl9LcoO2sS9hHV+Md6KgjYvvSurZt09Rz350DaLp4XwDjf3f9hYe6C9JkV7/L+rnc4P6dlNZA2wBqHKPoiKSj81ryLBsKjayPStZZRHdj1FAhccfqybYxmbm+Ns7cgKSsjBsBBncJwqFeMxoSQYj/y/+Ini4MZgW26GO9+y+3caYZOct8We/jEmru2JYJZL26rMdCT+EMdACVy02r6zhApiH+bYmAbkExIE7uOoP/TNC2sLOcutZR2VLf6ESB4MevgVG2q4UbYS0ZL6npSWi9B/bHGcHzvM1apviSlod61IfSc0eI4ki6uuDPs5hK1s0W7BQOyYopUV3KtNypmpS1YOgkIOifJLVIjH7AtCLP8MK8sAF/GRc+0uxcJT979n2x6kfB7J6N3RXlfMyzgTWuxzioJ835R0aLxeJNj6oLFRTriq+S/JL2g8HiKwRkovIJq0Byuq8fORVQKYioTzbgz68tvBmBqUxz83v3aA8LUZbo0no0lTrLXqa6gYOtLt6DUEvAAR/i3ojJmpCEiZunoHqfnR0fVWnbFJfpyM9PQ13r4nxxoCiwV9ag890oR/uXbHiq9okb/bWgF5qGndQdblPX7XmwcJkQbrUUKQllmI/4CiAd4Tb0kIdOLNG6lI=" id="2" />
+    <SignatureUserName Signature="HLWur/Y7HX37riIxmJym17/pF+2Ozph7jnBzmaEXFcuNzv62L52d2RTvi/o/9L4vkkE89hPlQEY1/vdx/K14SZ3KE+9FUHFJ65NDIcLlshsgJu2k/WHbQNt/TC0+jrin6jybSJWIen7+W2KtnNzke/1O0z/M/FstkZPLYGsgq1x3wkfdZKwGAGrc3lZ4atys5eiupdlQez1nMcaI9JdIR8V+/Mbcr2vD2ZMRePr9hun979Yzjq+m4oF/3fxa/XxJEFFs8Y/A1FO9A7nsJNJ47r5tV7KYKiIrakzJS1+ekjxuxrBPDUEWeEifINOIbY3GhHxj0fiFGgw1bopP1TFGXW7GCXNSMsEVrod+Ixk3PksjNtXeM8SycquK+AVbqqdkSClSsc4nAX/nC688ePTz5jxA9EDok+tCByZQq7F3C3MmW/jSeTAW5t503P/oToCDQjvxIrhtcaSKCeIoHIUc7BCj57MYg+n88HGzZQuFlnsgatIpl0l+8bI27+2izudgEHgqXLeg0yChOk/W3Fs56RpDAo17B7a1iESLxxB/8PYtIaIvRAL/KL/fhkCgRUepau0a56KS2A1rx+Dpqo9WoWw3pnDvqVtgqI+2Y2JqnUWDkmaUWxPBBPTNykvez1p+1gevcPEEQYlNerCiaans6cztuNjJQFx9gOk3l8kFRFI=">Alexander Herzog</SignatureUserName>
+    <SignaturePublicKey>MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEA27bWCr3iilDtciR0StvO5PiOI7753foBPQ7SxAnkP5nXdy3c8uABlZs9Je766+uWFveAWaRcRFvKG0QUz6dwiB7sfBpCaAD96qY2jlb7qk33eiy04fOV6lFJqLNdUVeo1+hDYKczfEsstOTX+4rwhS7zUVYVwkdDIPuBdv5qvTxfZQAxS7KDlR5i4o6YAxT2+gV6viQfk7PUoygAybJUJ0OwYcR7XR1qUn49uGMsSOkzLUtF77VMOOkiH7HeThG61I9C1vMjytDHbv2ul8tbKoRVPwNmr39U3O4RBvo+yKknrqwrfryM3yehSvHpJChwQSG/OwR/7RZDCt3bPmbCcrjiy6oILzfqaRwSX1nro0a+M/vgXVzEoxStcktlVQi1V+DCbYC4F8ETUyrQX5Ipit+Vw0m+Ch5isgvQc6UGPUNafKLlj+CNBuJUDLqpw1QGB1sp23HLzSgZ5X00JimbpQqXNYb7PD3flLGCBysP5nyyCvS8A1GGSVyXTO9LLgthdMtuwsd1z/d+DfqFIqQHK6bjdBqqxNj2/yjpgs9qV9hFoL79j1NUfKfebOHyFAUXYqz/XQb4/6GYOjnOkzNGdvKnOSu9Ca9f417oYJRkl4z2hpRk6YIyfbSGFYIS9Gz7Benno6UjhI/0aYQ8nb9BaiUk0tbpsB0YYGOaSje69q8CAwEAAQ==</SignaturePublicKey>
+  </CriticalStationsSignature>
+</Model>
